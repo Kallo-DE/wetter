@@ -22,7 +22,7 @@ dialog{border:0;border-radius:12px;width:min(92vw,420px)}dialog input{width:100%
 <main>
 <section id=now><div class=bar><span id=stamp>Lade …</span><button id=rf>↻</button></div><div id=tiles></div></section>
 <section id=hist hidden>
-<div class=bar><select id=pre><option value=24>Letzte 24 Stunden<option value=7>Letzte 7 Tage<option value=0>Heute<option value=1>Gestern<option value=d>Tag wählen …</select><input type=date id=day hidden></div>
+<div class=bar><select id=pre><option value=24>Letzte 24 Stunden<option value=7>Letzte 7 Tage<option value=0>Heute<option value=1>Gestern<option value=m>Letzter Monat (1. bis heute)<option value=M>Monat wählen …<option value=d>Tag wählen …</select><input type=date id=day hidden><input type=month id=mon hidden></div>
 <div id=chips></div><div id=info class=st></div><div id=charts></div>
 <div class=bar><label><input type=checkbox id=xl checked> Excel-Format</label><button id=csv>📄 CSV exportieren</button></div>
 </section></main>
@@ -34,7 +34,7 @@ API-Key (oder ganzen Einrichtungslink einfügen)<input id=key autocomplete=off>
 const $=s=>document.querySelector(s),pad=n=>String(n).padStart(2,'0'),n=v=>v==null||v===''?NaN:+v,f=(v,d)=>isNaN(v)?'–':v.toFixed(d).replace('.',',');
 // [id, Name, Einheit, Nachkommastellen, Farbe, Standard an]
 const SER=[['temp','Temperatur','°C',1,'#e4572e',1],['feels','Gefühlte Temp.','°C',1,'#f39c12',0],['dewpt','Taupunkt','°C',1,'#3a86c8',0],['hum','Luftfeuchte','%',0,'#2a9d8f',1],['press','Luftdruck','hPa',1,'#7b5ea7',1],['wind','Wind','km/h',1,'#2f6fb3',1],['gust','Böen','km/h',1,'#f08a24',1],['rain','Regen (Tagessumme)','mm',2,'#1aa7c9',1],['rate','Regenrate','mm/h',2,'#0b5d75',0],['uv','UV-Index','',1,'#c2185b',0],['sol','Sonne','W/m²',0,'#e0b000',0]];
-const PAN=[['Temperatur','°C',['temp','feels','dewpt']],['Luftfeuchte','%',['hum']],['Luftdruck','hPa',['press']],['Wind','km/h',['wind','gust'],1],['Niederschlag (Tagessumme)','mm',['rain'],1],['Regenrate','mm/h',['rate'],1],['UV-Index','',['uv'],1],['Sonneneinstrahlung','W/m²',['sol'],1]];
+const PAN=[['Temperatur','°C',['temp','feels','dewpt']],['Niederschlag (Tagessumme)','mm',['rain'],1],['Luftfeuchte','%',['hum']],['Luftdruck','hPa',['press']],['Wind','km/h',['wind','gust'],1],['Regenrate','mm/h',['rate'],1],['UV-Index','',['uv'],1],['Sonneneinstrahlung','W/m²',['sol'],1]];
 const TL=[['temp','🌡 Temperatur'],['feels','🧣 Gefühlt'],['dewpt','💧 Taupunkt'],['hum','☁ Luftfeuchte'],['press','⏲ Luftdruck'],['wind','💨 Wind'],['gust','🌬 Böen'],['dir','🧭 Richtung'],['rain','🌧 Regen heute'],['rate','☔ Regenrate'],['uv','🕶 UV-Index'],['sol','☀ Sonne']];
 const CP='N NNO NO ONO O OSO SO SSO S SSW SW WSW W WNW NW NNW'.split(' '),cp=d=>isNaN(d)?'–':CP[Math.round((d%360)/22.5)%16];
 const info=Object.fromEntries(SER.map(s=>[s[0],s]));
@@ -57,17 +57,27 @@ uv:g(o.uvHigh,o.uv),sol:g(o.solarRadiationHigh,o.solarRadiation)}}
 async function cur(){try{const a=await get('observations/current');if(!a.length){$('#stamp').textContent='Keine aktuellen Daten (Station sendet nicht).';return}
 const r=map(a[0]);$('#tiles').innerHTML=TL.map(([k,l])=>{const s=info[k]||[];const v=k=='dir'?cp(r.dir)+' ('+f(r.dir,0)+'°)':f(r[k],s[3])+(s[2]?' '+s[2]:'');return`<div class=tile><small>${l}</small><b>${v}</b></div>`}).join('');
 $('#stamp').textContent='Stand: '+r.t.toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})}catch(e){msg(e.message)}}
-async function hist(){const p=$('#pre').value;try{let a;
+const pk=r=>({...r,t:+r.t}),up=r=>{const o={};for(const k in r)o[k]=r[k]===null?NaN:r[k];o.t=new Date(r.t);return o},wait=ms=>new Promise(z=>setTimeout(z,ms));
+let daily=false,busy=0;
+// Tageswerte vom 1. des Monats bis heute; abgeschlossene Tage werden dauerhaft gespeichert (Abruflimit schonen)
+async function month(y,mo){const now=new Date(),cm=y==now.getFullYear()&&mo==now.getMonth(),N=cm?now.getDate():new Date(y,mo+1,0).getDate(),cache=load('days',{}),out=[];let fetched=0;
+try{for(let i=1;i<=N;i++){const d=new Date(y,mo,i),key=''+y+pad(mo+1)+pad(i),today=cm&&i==N;let r=today?undefined:cache[key];
+if(r===undefined){if(fetched++)await wait(2100);$('#info').textContent='Lade Tag '+i+' von '+N+' …';const a=await get('history/daily',{date:key});r=a.length&&!isNaN(+map(a[0]).t)?pk(map(a[0])):null;if(!today)cache[key]=r}
+if(r)out.push(up(r))}}finally{store('days',cache)}
+return out}
+async function hist(){const p=$('#pre').value;if(busy)return msg('Es wird noch geladen …');busy=1;try{daily=p=='m'||p=='M';
+if(p=='m'){const n=new Date();rows=await month(n.getFullYear(),n.getMonth())}else if(p=='M'){const v=$('#mon').value;if(!v)return;rows=await month(+v.slice(0,4),+v.slice(5,7)-1)}else{let a;
 if(p=='24')a=await get('observations/all/1day');else if(p=='7')a=await get('observations/hourly/7day');
 else{const d=new Date();if(p=='1')d.setDate(d.getDate()-1);const s=p=='d'?$('#day').value.replace(/-/g,''):''+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate());if(!s)return;a=await get('history/all',{date:s})}
-rows=a.map(map).filter(r=>!isNaN(+r.t)).sort((x,y)=>x.t-y.t);draw()}catch(e){msg(e.message)}}
+rows=a.map(map).filter(r=>!isNaN(+r.t)).sort((x,y)=>x.t-y.t)}
+draw()}catch(e){msg(e.message)}finally{busy=0}}
 function plot(cv,ks,z){const dpr=devicePixelRatio||1,W=cv.clientWidth,H=190;cv.width=W*dpr;cv.height=H*dpr;const c=cv.getContext('2d');c.scale(dpr,dpr);c.font='11px system-ui';
 const L=42,R=8,T=8,B=20,x0=+rows[0].t,x1=+rows[rows.length-1].t,v=ks.flatMap(k=>rows.map(r=>r[k])).filter(x=>!isNaN(x));let lo=Math.min(...v),hi=Math.max(...v);if(z)lo=Math.min(0,lo);if(hi==lo){hi+=1;lo-=1}
 const X=t=>L+(t-x0)/(x1-x0||1)*(W-L-R),Y=y=>T+(1-(y-lo)/(hi-lo))*(H-T-B);c.strokeStyle='#e1e6ec';c.fillStyle='#6b7785';c.textAlign='right';
 for(let i=0;i<=4;i++){const y=lo+(hi-lo)*i/4;c.beginPath();c.moveTo(L,Y(y));c.lineTo(W-R,Y(y));c.stroke();c.fillText(y.toFixed(hi-lo<10?1:0).replace('.',','),L-4,Y(y)+4)}
 c.textAlign='center';const long=x1-x0>2*864e5;for(let i=0;i<=3;i++){const t=x0+(x1-x0)*i/3,d=new Date(t);c.fillText(long?pad(d.getDate())+'.'+pad(d.getMonth()+1)+'.':pad(d.getHours())+':'+pad(d.getMinutes()),Math.min(W-18,Math.max(L+8,X(t))),H-5)}
-ks.forEach(k=>{c.strokeStyle=info[k][4];c.lineWidth=1.8;c.beginPath();let on=0;rows.forEach(r=>{if(isNaN(r[k])){on=0;return}on?c.lineTo(X(+r.t),Y(r[k])):c.moveTo(X(+r.t),Y(r[k]));on=1});c.stroke()})}
-function draw(){const box=$('#charts');box.innerHTML='';if(!rows.length){$('#info').textContent='Keine Daten für diesen Zeitraum.';return}$('#info').textContent=rows.length+' Messwerte';
+ks.forEach(k=>{if(daily&&k=='rain'){c.fillStyle=info[k][4];const bw=Math.max(2,(W-L-R)/rows.length*.7);rows.forEach(r=>{if(!isNaN(r[k]))c.fillRect(X(+r.t)-bw/2,Y(r[k]),bw,Y(0)-Y(r[k]))});return}c.strokeStyle=info[k][4];c.lineWidth=1.8;c.beginPath();let on=0;rows.forEach(r=>{if(isNaN(r[k])){on=0;return}on?c.lineTo(X(+r.t),Y(r[k])):c.moveTo(X(+r.t),Y(r[k]));on=1});c.stroke()})}
+function draw(){const box=$('#charts');box.innerHTML='';if(!rows.length){$('#info').textContent='Keine Daten für diesen Zeitraum.';return}$('#info').textContent=rows.length+(daily?' Tage':' Messwerte');
 PAN.forEach(([t,u,ks,z])=>{const k2=ks.filter(k=>sel.includes(k)&&rows.some(r=>!isNaN(r[k])));if(!k2.length)return;const d=document.createElement('div');d.className='card';
 d.innerHTML=`<h3>${t}${u?' ('+u+')':''}</h3><canvas></canvas><div class=st>${k2.map(k=>{const v=rows.map(r=>r[k]).filter(x=>!isNaN(x)),s=info[k];return`<span style="color:${s[4]}">●</span> ${s[1]}: ${f(Math.min(...v),s[3])} bis ${f(Math.max(...v),s[3])}, Ø ${f(v.reduce((a,b)=>a+b)/v.length,s[3])}`}).join('<br>')}</div>`;box.appendChild(d);plot(d.querySelector('canvas'),k2,z)})}
 $('#chips').innerHTML=SER.map(s=>`<label class=chip><input type=checkbox value=${s[0]} ${sel.includes(s[0])?'checked':''}> ${s[1]}</label>`).join('');
@@ -77,7 +87,7 @@ const L=[['Zeit',...ks.map(s=>s[1]+(s[2]?' ('+s[2]+')':''))].join(sep)];
 rows.forEach(r=>L.push([`${pad(r.t.getDate())}.${pad(r.t.getMonth()+1)}.${r.t.getFullYear()} ${pad(r.t.getHours())}:${pad(r.t.getMinutes())}`,...ks.map(s=>num(r[s[0]]))].join(sep)));
 const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+L.join('\r\n')],{type:'text/csv'}));a.download='wetter_'+cfg.st+'.csv';a.click()};
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x==b));$('#now').hidden=b.dataset.t!='now';$('#hist').hidden=b.dataset.t!='hist';if(b.dataset.t=='hist'&&!rows.length)hist();else if(b.dataset.t=='hist')draw()});
-$('#pre').onchange=()=>{$('#day').hidden=$('#pre').value!='d';if($('#pre').value!='d')hist()};$('#day').onchange=hist;$('#day').max=new Date().toISOString().slice(0,10);
+$('#pre').onchange=()=>{const v=$('#pre').value;$('#day').hidden=v!='d';$('#mon').hidden=v!='M';if(v!='d')hist()};$('#day').onchange=hist;$('#mon').onchange=hist;$('#day').max=new Date().toISOString().slice(0,10);(()=>{const t=new Date(),v=t.getFullYear()+'-'+pad(t.getMonth()+1);$('#mon').max=v;t.setDate(1);t.setMonth(t.getMonth()-1);$('#mon').value=t.getFullYear()+'-'+pad(t.getMonth()+1)})();
 $('#rf').onclick=cur;
 $('#gear').onclick=()=>{$('#st').value=cfg.st||'';$('#key').value=cfg.key||'';$('#dlg').showModal()};$('#cancel').onclick=()=>$('#dlg').close();
 $('#ok').onclick=()=>{let k=$('#key').value.trim(),s=$('#st').value.trim();const u=new URLSearchParams(k.split('#').pop());if(u.get('key')){k=u.get('key');s=u.get('station')||s}
