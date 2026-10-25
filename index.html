@@ -83,7 +83,7 @@ if(t!=tok)return;rows=a.map(map).filter(r=>!isNaN(+r.t)).sort((x,y)=>x.t-y.t)}
 loading=0;prog('');draw();if(w)$('#info').textContent+=' – Abbruch: '+w+' Die bereits geladenen Tage sind gespeichert; Monat erneut auswählen, um fortzufahren.'}
 catch(e){if(t==tok){loading=0;prog('');$('#info').textContent=e.message;msg(e.message)}}}
 function plot(cv,ks,z,fx){const dpr=devicePixelRatio||1,W=cv.clientWidth,H=190;cv.width=W*dpr;cv.height=H*dpr;const c=cv.getContext('2d');c.scale(dpr,dpr);c.font='11px system-ui';
-const L=42,R=8,T=8,B=20,x0=+rows[0].t,x1=+rows[rows.length-1].t,v=ks.flatMap(k=>rows.map(r=>r[k])).filter(x=>!isNaN(x));let lo=Math.min(...v),hi=Math.max(...v);if(z)lo=Math.min(0,lo);if(hi==lo){hi+=1;lo-=1}if(fx){lo=fx[0];hi=fx[1]}
+const L=42,R=8,T=8,B=20,pd=daily?432e5:0,x0=+rows[0].t-pd,x1=+rows[rows.length-1].t+pd,v=ks.flatMap(k=>rows.map(r=>r[k])).filter(x=>!isNaN(x));let lo=Math.min(...v),hi=Math.max(...v);if(z)lo=Math.min(0,lo);if(hi==lo){hi+=1;lo-=1}if(fx){lo=fx[0];hi=fx[1]}
 const X=t=>L+(t-x0)/(x1-x0||1)*(W-L-R),Y=y=>T+(1-(y-lo)/(hi-lo))*(H-T-B);c.strokeStyle='#e1e6ec';c.fillStyle='#6b7785';c.textAlign='right';
 const nt=fx?(hi-lo)/10:4;for(let i=0;i<=nt;i++){const y=lo+(hi-lo)*i/nt;c.beginPath();c.moveTo(L,Y(y));c.lineTo(W-R,Y(y));c.stroke();c.fillText(y.toFixed(hi-lo<10?1:0).replace('.',','),L-4,Y(y)+4)}
 if(fx){c.strokeStyle='#9aa5b1';c.beginPath();c.moveTo(L,Y(0));c.lineTo(W-R,Y(0));c.stroke()}c.textAlign='center';const long=x1-x0>2*864e5;for(let i=0;i<=3;i++){const t=x0+(x1-x0)*i/3,d=new Date(t);c.fillText(long?pad(d.getDate())+'.'+pad(d.getMonth()+1)+'.':pad(d.getHours())+':'+pad(d.getMinutes()),Math.min(W-18,Math.max(L+8,X(t))),H-5)}
