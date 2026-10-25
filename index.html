@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wetter</title>
+<link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#2f6fb3">
+<style>
+*{box-sizing:border-box}body{margin:0;font:15px system-ui,sans-serif;background:#f3f5f8;color:#1f2a37}
+header{background:#2f6fb3;color:#fff;display:flex;align-items:center;gap:10px;padding:12px 14px}header b{font-size:18px}header span{flex:1;opacity:.8;font-size:13px}
+button,select,input[type=date]{font:inherit;padding:8px 12px;border:1px solid #cbd3dc;border-radius:8px;background:#fff}
+header button{background:none;color:#fff;border:0;font-size:20px;padding:0 4px}
+nav{display:flex;background:#fff;border-bottom:1px solid #e1e6ec}nav button{flex:1;border:0;border-radius:0;background:none;padding:12px;border-bottom:3px solid transparent}nav .on{border-color:#2f6fb3;color:#2f6fb3;font-weight:600}
+main{padding:10px;max-width:900px;margin:auto}.bar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:6px 0}
+#tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}.tile{background:#fff;border:1px solid #e1e6ec;border-radius:10px;padding:12px}.tile small{display:block;color:#6b7785}.tile b{font-size:21px}
+#chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.chip{background:#fff;border:1px solid #cbd3dc;border-radius:16px;padding:5px 10px;font-size:13px}
+.card{background:#fff;border:1px solid #e1e6ec;border-radius:10px;padding:10px;margin:8px 0}.card h3{margin:0 0 4px;font-size:15px}canvas{width:100%;height:190px;display:block}.st{font-size:12px;color:#6b7785;margin-top:4px}
+#msg{position:fixed;left:10px;right:10px;bottom:10px;background:#b3261e;color:#fff;padding:12px;border-radius:10px;display:none}
+dialog{border:0;border-radius:12px;width:min(92vw,420px)}dialog input{width:100%;font:inherit;padding:9px;margin:4px 0 12px;border:1px solid #cbd3dc;border-radius:8px}
+</style></head><body>
+<header><b>🌦 Wetter</b><span id=stn></span><button id=gear title="Einstellungen">⚙</button></header>
+<nav><button data-t=now class=on>Aktuell</button><button data-t=hist>Verlauf</button></nav>
+<main>
+<section id=now><div class=bar><span id=stamp>Lade …</span><button id=rf>↻</button></div><div id=tiles></div></section>
+<section id=hist hidden>
+<div class=bar><select id=pre><option value=24>Letzte 24 Stunden<option value=7>Letzte 7 Tage<option value=0>Heute<option value=1>Gestern<option value=d>Tag wählen …</select><input type=date id=day hidden></div>
+<div id=chips></div><div id=info class=st></div><div id=charts></div>
+<div class=bar><label><input type=checkbox id=xl checked> Excel-Format</label><button id=csv>📄 CSV exportieren</button></div>
+</section></main>
+<div id=msg></div>
+<dialog id=dlg><b>Einstellungen</b><br><br>Stations-ID<input id=st autocomplete=off autocapitalize=characters>
+API-Key (oder ganzen Einrichtungslink einfügen)<input id=key autocomplete=off>
+<div class=bar><button id=cancel>Abbrechen</button><button id=ok style="background:#2f6fb3;color:#fff">Speichern</button></div></dialog>
+<script>
+const $=s=>document.querySelector(s),pad=n=>String(n).padStart(2,'0'),n=v=>v==null||v===''?NaN:+v,f=(v,d)=>isNaN(v)?'–':v.toFixed(d).replace('.',',');
+// [id, Name, Einheit, Nachkommastellen, Farbe, Standard an]
+const SER=[['temp','Temperatur','°C',1,'#e4572e',1],['feels','Gefühlte Temp.','°C',1,'#f39c12',0],['dewpt','Taupunkt','°C',1,'#3a86c8',0],['hum','Luftfeuchte','%',0,'#2a9d8f',1],['press','Luftdruck','hPa',1,'#7b5ea7',1],['wind','Wind','km/h',1,'#2f6fb3',1],['gust','Böen','km/h',1,'#f08a24',1],['rain','Regen (Tagessumme)','mm',2,'#1aa7c9',1],['rate','Regenrate','mm/h',2,'#0b5d75',0],['uv','UV-Index','',1,'#c2185b',0],['sol','Sonne','W/m²',0,'#e0b000',0]];
+const PAN=[['Temperatur','°C',['temp','feels','dewpt']],['Luftfeuchte','%',['hum']],['Luftdruck','hPa',['press']],['Wind','km/h',['wind','gust'],1],['Niederschlag (Tagessumme)','mm',['rain'],1],['Regenrate','mm/h',['rate'],1],['UV-Index','',['uv'],1],['Sonneneinstrahlung','W/m²',['sol'],1]];
+const TL=[['temp','🌡 Temperatur'],['feels','🧣 Gefühlt'],['dewpt','💧 Taupunkt'],['hum','☁ Luftfeuchte'],['press','⏲ Luftdruck'],['wind','💨 Wind'],['gust','🌬 Böen'],['dir','🧭 Richtung'],['rain','🌧 Regen heute'],['rate','☔ Regenrate'],['uv','🕶 UV-Index'],['sol','☀ Sonne']];
+const CP='N NNO NO ONO O OSO SO SSO S SSW SW WSW W WNW NW NNW'.split(' '),cp=d=>isNaN(d)?'–':CP[Math.round((d%360)/22.5)%16];
+const info=Object.fromEntries(SER.map(s=>[s[0],s]));
+const load=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}},store=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
+let cfg=load('wu',{}),sel=load('sel',SER.filter(s=>s[5]).map(s=>s[0])),rows=[];
+// Einrichtungslink: https://…/#key=DEIN_KEY&station=DEINE_ID
+(()=>{const h=new URLSearchParams(location.hash.slice(1));if(h.get('key')){cfg={key:h.get('key').trim(),st:(h.get('station')||cfg.st||'').trim()};store('wu',cfg);history.replaceState(null,'',location.pathname+location.search)}})();
+function msg(t){const m=$('#msg');m.textContent=t;m.style.display='block';setTimeout(()=>m.style.display='none',6000)}
+async function get(ep,p={}){if(!cfg.key||!cfg.st)throw Error('Bitte zuerst unter ⚙ Stations-ID und API-Key eintragen.');
+const q=new URLSearchParams({stationId:cfg.st,format:'json',units:'m',numericPrecision:'decimal',apiKey:cfg.key,...p});let r;
+try{r=await fetch('https://api.weather.com/v2/pws/'+ep+'?'+q)}catch(e){throw Error('Abruf nicht möglich: Internet prüfen – oder Weather Underground blockiert Abrufe aus dem Browser.')}
+if(r.status==204)return[];if(r.status==401||r.status==403)throw Error('API-Key ungültig.');if(r.status==429)throw Error('Abruflimit erreicht, später erneut versuchen.');if(!r.ok)throw Error('Fehler '+r.status);
+return(await r.json()).observations||[]}
+function map(o){const m=o.metric||{},g=(...a)=>{for(const x of a){const v=n(x);if(!isNaN(v))return v}return NaN};
+const t=g(m.tempAvg,m.temp),hi=g(m.heatindexAvg,m.heatIndex),wc=g(m.windchillAvg,m.windChill);
+return{t:new Date((o.obsTimeLocal||'').replace(' ','T')),temp:t,dewpt:g(m.dewptAvg,m.dewpt),feels:t>=26.7&&!isNaN(hi)?hi:t<=10&&!isNaN(wc)?wc:t,
+hum:g(o.humidityAvg,o.humidity),press:!isNaN(n(m.pressureMax))&&!isNaN(n(m.pressureMin))?(+m.pressureMax+ +m.pressureMin)/2:g(m.pressure),
+wind:g(m.windspeedAvg,m.windSpeed),gust:g(m.windgustHigh,m.windGust),dir:g(o.winddirAvg,o.winddir),rain:g(m.precipTotal),rate:g(m.precipRate),
+uv:g(o.uvHigh,o.uv),sol:g(o.solarRadiationHigh,o.solarRadiation)}}
+async function cur(){try{const a=await get('observations/current');if(!a.length){$('#stamp').textContent='Keine aktuellen Daten (Station sendet nicht).';return}
+const r=map(a[0]);$('#tiles').innerHTML=TL.map(([k,l])=>{const s=info[k]||[];const v=k=='dir'?cp(r.dir)+' ('+f(r.dir,0)+'°)':f(r[k],s[3])+(s[2]?' '+s[2]:'');return`<div class=tile><small>${l}</small><b>${v}</b></div>`}).join('');
+$('#stamp').textContent='Stand: '+r.t.toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})}catch(e){msg(e.message)}}
+async function hist(){const p=$('#pre').value;try{let a;
+if(p=='24')a=await get('observations/all/1day');else if(p=='7')a=await get('observations/hourly/7day');
+else{const d=new Date();if(p=='1')d.setDate(d.getDate()-1);const s=p=='d'?$('#day').value.replace(/-/g,''):''+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate());if(!s)return;a=await get('history/all',{date:s})}
+rows=a.map(map).filter(r=>!isNaN(+r.t)).sort((x,y)=>x.t-y.t);draw()}catch(e){msg(e.message)}}
+function plot(cv,ks,z){const dpr=devicePixelRatio||1,W=cv.clientWidth,H=190;cv.width=W*dpr;cv.height=H*dpr;const c=cv.getContext('2d');c.scale(dpr,dpr);c.font='11px system-ui';
+const L=42,R=8,T=8,B=20,x0=+rows[0].t,x1=+rows[rows.length-1].t,v=ks.flatMap(k=>rows.map(r=>r[k])).filter(x=>!isNaN(x));let lo=Math.min(...v),hi=Math.max(...v);if(z)lo=Math.min(0,lo);if(hi==lo){hi+=1;lo-=1}
+const X=t=>L+(t-x0)/(x1-x0||1)*(W-L-R),Y=y=>T+(1-(y-lo)/(hi-lo))*(H-T-B);c.strokeStyle='#e1e6ec';c.fillStyle='#6b7785';c.textAlign='right';
+for(let i=0;i<=4;i++){const y=lo+(hi-lo)*i/4;c.beginPath();c.moveTo(L,Y(y));c.lineTo(W-R,Y(y));c.stroke();c.fillText(y.toFixed(hi-lo<10?1:0).replace('.',','),L-4,Y(y)+4)}
+c.textAlign='center';const long=x1-x0>2*864e5;for(let i=0;i<=3;i++){const t=x0+(x1-x0)*i/3,d=new Date(t);c.fillText(long?pad(d.getDate())+'.'+pad(d.getMonth()+1)+'.':pad(d.getHours())+':'+pad(d.getMinutes()),Math.min(W-18,Math.max(L+8,X(t))),H-5)}
+ks.forEach(k=>{c.strokeStyle=info[k][4];c.lineWidth=1.8;c.beginPath();let on=0;rows.forEach(r=>{if(isNaN(r[k])){on=0;return}on?c.lineTo(X(+r.t),Y(r[k])):c.moveTo(X(+r.t),Y(r[k]));on=1});c.stroke()})}
+function draw(){const box=$('#charts');box.innerHTML='';if(!rows.length){$('#info').textContent='Keine Daten für diesen Zeitraum.';return}$('#info').textContent=rows.length+' Messwerte';
+PAN.forEach(([t,u,ks,z])=>{const k2=ks.filter(k=>sel.includes(k)&&rows.some(r=>!isNaN(r[k])));if(!k2.length)return;const d=document.createElement('div');d.className='card';
+d.innerHTML=`<h3>${t}${u?' ('+u+')':''}</h3><canvas></canvas><div class=st>${k2.map(k=>{const v=rows.map(r=>r[k]).filter(x=>!isNaN(x)),s=info[k];return`<span style="color:${s[4]}">●</span> ${s[1]}: ${f(Math.min(...v),s[3])} bis ${f(Math.max(...v),s[3])}, Ø ${f(v.reduce((a,b)=>a+b)/v.length,s[3])}`}).join('<br>')}</div>`;box.appendChild(d);plot(d.querySelector('canvas'),k2,z)})}
+$('#chips').innerHTML=SER.map(s=>`<label class=chip><input type=checkbox value=${s[0]} ${sel.includes(s[0])?'checked':''}> ${s[1]}</label>`).join('');
+$('#chips').onchange=()=>{sel=[...document.querySelectorAll('#chips input:checked')].map(i=>i.value);store('sel',sel);draw()};
+$('#csv').onclick=()=>{if(!rows.length)return msg('Keine Daten zum Exportieren.');const ks=SER.filter(s=>sel.includes(s[0])),x=$('#xl').checked,sep=x?';':',',num=v=>isNaN(v)?'':x?String(v).replace('.',','):String(v);
+const L=[['Zeit',...ks.map(s=>s[1]+(s[2]?' ('+s[2]+')':''))].join(sep)];
+rows.forEach(r=>L.push([`${pad(r.t.getDate())}.${pad(r.t.getMonth()+1)}.${r.t.getFullYear()} ${pad(r.t.getHours())}:${pad(r.t.getMinutes())}`,...ks.map(s=>num(r[s[0]]))].join(sep)));
+const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+L.join('\r\n')],{type:'text/csv'}));a.download='wetter_'+cfg.st+'.csv';a.click()};
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x==b));$('#now').hidden=b.dataset.t!='now';$('#hist').hidden=b.dataset.t!='hist';if(b.dataset.t=='hist'&&!rows.length)hist();else if(b.dataset.t=='hist')draw()});
+$('#pre').onchange=()=>{$('#day').hidden=$('#pre').value!='d';if($('#pre').value!='d')hist()};$('#day').onchange=hist;$('#day').max=new Date().toISOString().slice(0,10);
+$('#rf').onclick=cur;
+$('#gear').onclick=()=>{$('#st').value=cfg.st||'';$('#key').value=cfg.key||'';$('#dlg').showModal()};$('#cancel').onclick=()=>$('#dlg').close();
+$('#ok').onclick=()=>{let k=$('#key').value.trim(),s=$('#st').value.trim();const u=new URLSearchParams(k.split('#').pop());if(u.get('key')){k=u.get('key');s=u.get('station')||s}
+if(!k||!s)return msg('Bitte beide Felder ausfüllen.');cfg={key:k,st:s};store('wu',cfg);$('#dlg').close();$('#stn').textContent='Station '+s;rows=[];cur();if(!$('#hist').hidden)hist()};
+let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>rows.length&&!$('#hist').hidden&&draw(),200)});
+setInterval(()=>{if(!document.hidden&&cfg.key)cur()},3e5);
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+$('#stn').textContent=cfg.st?'Station '+cfg.st:'';
+if(!cfg.key||!cfg.st)$('#gear').click();else cur();
+</script></body></html>
