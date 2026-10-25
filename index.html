@@ -88,7 +88,8 @@ const X=t=>L+(t-x0)/(x1-x0||1)*(W-L-R),Y=y=>T+(1-(y-lo)/(hi-lo))*(H-T-B);c.strok
 const nt=fx?(hi-lo)/10:4;for(let i=0;i<=nt;i++){const y=lo+(hi-lo)*i/nt;c.beginPath();c.moveTo(L,Y(y));c.lineTo(W-R,Y(y));c.stroke();c.fillText(y.toFixed(hi-lo<10?1:0).replace('.',','),L-4,Y(y)+4)}
 if(fx){c.strokeStyle='#9aa5b1';c.beginPath();c.moveTo(L,Y(0));c.lineTo(W-R,Y(0));c.stroke()}c.textAlign='center';const long=x1-x0>2*864e5;for(let i=0;i<=3;i++){const t=x0+(x1-x0)*i/3,d=new Date(t);c.fillText(long?pad(d.getDate())+'.'+pad(d.getMonth()+1)+'.':pad(d.getHours())+':'+pad(d.getMinutes()),Math.min(W-18,Math.max(L+8,X(t))),H-5)}
 ks.forEach(k=>{if(daily&&k=='rain'){c.fillStyle=info[k][4];const bw=Math.max(2,(W-L-R)/rows.length*.7);rows.forEach(r=>{if(!isNaN(r[k]))c.fillRect(X(+r.t)-bw/2,Y(r[k]),bw,Y(0)-Y(r[k]))});return}c.strokeStyle=info[k][4];c.lineWidth=1.8;c.beginPath();let on=0;rows.forEach(r=>{if(isNaN(r[k])){on=0;return}on?c.lineTo(X(+r.t),Y(r[k])):c.moveTo(X(+r.t),Y(r[k]));on=1});c.stroke()})}
-function draw(){if(loading)return;const box=$('#charts');box.innerHTML='';if(!rows.length){$('#info').textContent='Keine Daten für diesen Zeitraum.';return}$('#info').textContent=rows.length+(daily?' Tage':' Messwerte');
+function draw(){if(loading)return;const box=$('#charts'),y=scrollY;box.style.minHeight=box.offsetHeight+'px';try{draw0(box)}finally{box.style.minHeight='';scrollTo(0,y)}}
+function draw0(box){box.innerHTML='';if(!rows.length){$('#info').textContent='Keine Daten für diesen Zeitraum.';return}$('#info').textContent=rows.length+(daily?' Tage':' Messwerte');
 PAN.forEach(([t,u,ks,z,fx])=>{const k2=ks.filter(k=>sel.includes(k)&&rows.some(r=>!isNaN(r[k])));if(!k2.length)return;const d=document.createElement('div');d.className='card';
 d.innerHTML=`<h3>${t}${u?' ('+u+')':''}</h3><canvas></canvas><div class=st>${k2.map(k=>{const v=rows.map(r=>r[k]).filter(x=>!isNaN(x)),s=info[k];return`<span style="color:${s[4]}">●</span> ${s[1]}: ${f(Math.min(...v),s[3])} bis ${f(Math.max(...v),s[3])}, Ø ${f(v.reduce((a,b)=>a+b)/v.length,s[3])}`}).join('<br>')}</div>`;box.appendChild(d);plot(d.querySelector('canvas'),k2,z,fx)})}
 $('#chips').innerHTML=SER.map(s=>`<label class=chip><input type=checkbox value=${s[0]} ${sel.includes(s[0])?'checked':''}> ${s[1]}</label>`).join('');
@@ -103,7 +104,7 @@ $('#rf').onclick=cur;
 $('#gear').onclick=()=>{$('#st').value=cfg.st||'';$('#key').value=cfg.key||'';$('#dlg').showModal()};$('#cancel').onclick=()=>$('#dlg').close();
 $('#ok').onclick=()=>{let k=$('#key').value.trim(),s=$('#st').value.trim();const u=new URLSearchParams(k.split('#').pop());if(u.get('key')){k=u.get('key');s=u.get('station')||s}
 if(!k||!s)return msg('Bitte beide Felder ausfüllen.');cfg={key:k,st:s};store('wu',cfg);$('#dlg').close();$('#stn').textContent='Station '+s;rows=[];cur();if(!$('#hist').hidden)hist()};
-let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>rows.length&&!$('#hist').hidden&&draw(),200)});
+let rt,rw=innerWidth;addEventListener('resize',()=>{if(innerWidth==rw)return;rw=innerWidth;clearTimeout(rt);rt=setTimeout(()=>rows.length&&!$('#hist').hidden&&draw(),200)});
 setInterval(()=>{if(!document.hidden&&cfg.key)cur()},3e5);
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 $('#stn').textContent=cfg.st?'Station '+cfg.st:'';
