@@ -14,13 +14,14 @@ main{padding:10px;max-width:900px;margin:auto}.bar{display:flex;gap:8px;align-it
 #tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}.tile{background:#fff;border:1px solid #e1e6ec;border-radius:10px;padding:12px}.tile small{display:block;color:#6b7785}.tile b{font-size:21px}
 #chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.chip{background:#fff;border:1px solid #cbd3dc;border-radius:16px;padding:5px 10px;font-size:13px}
 .card{background:#fff;border:1px solid #e1e6ec;border-radius:10px;padding:10px;margin:8px 0}.card h3{margin:0 0 4px;font-size:15px}canvas{width:100%;height:190px;display:block}.st{font-size:12px;color:#6b7785;margin-top:4px}
+.fh{margin:20px 0 6px;font-size:16px}.fr{background:#fff;border:1px solid #e1e6ec;border-radius:10px;padding:10px 12px;margin:6px 0;line-height:1.5}.fr b{font-size:15px}
 #msg{position:fixed;left:10px;right:10px;bottom:10px;background:#b3261e;color:#fff;padding:12px;border-radius:10px;display:none}
 dialog{border:0;border-radius:12px;width:min(92vw,420px)}dialog input{width:100%;font:inherit;padding:9px;margin:4px 0 12px;border:1px solid #cbd3dc;border-radius:8px}
 </style></head><body>
 <header><b>🌦 Wetter</b><span id=stn></span><button id=gear title="Einstellungen">⚙</button></header>
 <nav><button data-t=now class=on>Aktuell</button><button data-t=hist>Verlauf</button></nav>
 <main>
-<section id=now><div class=bar><span id=stamp>Lade …</span><button id=rf>↻</button></div><div id=tiles></div></section>
+<section id=now><div class=bar><span id=stamp>Lade …</span><button id=rf>↻</button></div><div id=tiles></div><h3 class=fh>Wettervorhersage · nächste 5 Tage</h3><div id=fc>Vorhersage wird geladen …</div><div class=st style="margin:6px 0 12px">Vorhersage für den Standort der Station von <a href="https://open-meteo.com" target=_blank rel=noopener>Open-Meteo.com</a></div></section>
 <section id=hist hidden>
 <div class=bar><select id=pre><option value=24>Letzte 24 Stunden<option value=7>Letzte 7 Tage<option value=0>Heute<option value=1>Gestern<option value=m>Letzter Monat (1. bis heute)<option value=M>Monat wählen …<option value=d>Tag wählen …</select><input type=date id=day hidden><input type=month id=mon hidden></div>
 <div id=hint class=st hidden>Hinweis: Das erste Laden eines Monats dauert etwa eine Minute, weil Weather Underground nur wenige Abrufe pro Minute erlaubt. Danach öffnet derselbe Monat sofort.</div><div id=chips></div><div id=info class=st></div><div id=prog class=card hidden><b id=pt></b><progress id=pb max=1 value=0 style="width:100%;margin:8px 0"></progress><div class=st>Bitte die Seite geöffnet lassen. Bereits geladene Tage werden gespeichert – bei einem Abbruch geht es später dort weiter.</div></div><div id=charts></div>
@@ -55,7 +56,7 @@ hum:g(o.humidityAvg,o.humidity),press:!isNaN(n(m.pressureMax))&&!isNaN(n(m.press
 wind:g(m.windspeedAvg,m.windSpeed),gust:g(m.windgustHigh,m.windGust),dir:g(o.winddirAvg,o.winddir),rain:g(m.precipTotal),rate:g(m.precipRate),
 uv:g(o.uvHigh,o.uv),sol:g(o.solarRadiationHigh,o.solarRadiation)}}
 async function cur(){try{const a=await get('observations/current');if(!a.length){$('#stamp').textContent='Keine aktuellen Daten (Station sendet nicht).';return}
-const r=map(a[0]);$('#tiles').innerHTML=TL.map(([k,l])=>{const s=info[k]||[];const v=k=='dir'?cp(r.dir)+' ('+f(r.dir,0)+'°)':f(r[k],s[3])+(s[2]?' '+s[2]:'');return`<div class=tile><small>${l}</small><b>${v}</b></div>`}).join('');
+const r=map(a[0]);if(a[0].lat!=null&&a[0].lon!=null&&(cfg.lat!=a[0].lat||cfg.lon!=a[0].lon)){cfg.lat=a[0].lat;cfg.lon=a[0].lon;store('wu',cfg)}fc();$('#tiles').innerHTML=TL.map(([k,l])=>{const s=info[k]||[];const v=k=='dir'?cp(r.dir)+' ('+f(r.dir,0)+'°)':f(r[k],s[3])+(s[2]?' '+s[2]:'');return`<div class=tile><small>${l}</small><b>${v}</b></div>`}).join('');
 $('#stamp').textContent='Stand: '+r.t.toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})}catch(e){msg(e.message)}}
 const pk=r=>({...r,t:+r.t}),up=r=>{const o={};for(const k in r)o[k]=r[k]===null?NaN:r[k];o.t=new Date(r.t);return o},wait=ms=>new Promise(z=>setTimeout(z,ms));
 let daily=false,loading=0,tok=0;
@@ -82,6 +83,13 @@ else{const d=new Date();if(p=='1')d.setDate(d.getDate()-1);const s=p=='d'?$('#da
 if(t!=tok)return;rows=a.map(map).filter(r=>!isNaN(+r.t)).sort((x,y)=>x.t-y.t)}
 loading=0;prog('');draw();if(w)$('#info').textContent+=' – Abbruch: '+w+' Die bereits geladenen Tage sind gespeichert; Monat erneut auswählen, um fortzufahren.'}
 catch(e){if(t==tok){loading=0;prog('');$('#info').textContent=e.message;msg(e.message)}}}
+const wm=c=>c==0?['☀','Klar']:c==1?['🌤','Meist klar']:c==2?['⛅','Teils bewölkt']:c==3?['☁','Bedeckt']:c<50?['🌫','Nebel']:c<60?['🌦','Nieselregen']:c<70?['🌧','Regen']:c<80?['🌨','Schnee']:c<85?['🌦','Schauer']:c<90?['🌨','Schneeschauer']:['⛈','Gewitter'];
+let fcT=0;
+async function fc(){if(!cfg.lat||Date.now()-fcT<18e5)return;fcT=Date.now();
+try{const r=await fetch('https://api.open-meteo.com/v1/forecast?'+new URLSearchParams({latitude:cfg.lat,longitude:cfg.lon,daily:'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_gusts_10m_max',timezone:'auto',forecast_days:5}));
+if(!r.ok)throw 0;const d=(await r.json()).daily;
+$('#fc').innerHTML=d.time.map((t,i)=>{const[e,x]=wm(d.weather_code[i]);return`<div class=fr><b>${new Date(t+'T12:00').toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'})}</b> ${e} ${x}<br>↑ ${f(n(d.temperature_2m_max[i]),0)}° ↓ ${f(n(d.temperature_2m_min[i]),0)}° · 🌧 ${f(n(d.precipitation_sum[i]),1)} mm (${f(n(d.precipitation_probability_max[i]),0)} %) · 💨 Böen bis ${f(n(d.wind_gusts_10m_max[i]),0)} km/h</div>`}).join('')}
+catch(e){fcT=0;$('#fc').textContent='Vorhersage derzeit nicht verfügbar.'}}
 function plot(cv,ks,z,fx){const dpr=devicePixelRatio||1,W=cv.clientWidth,H=190;cv.width=W*dpr;cv.height=H*dpr;const c=cv.getContext('2d');c.scale(dpr,dpr);c.font='11px system-ui';
 const L=42,R=8,T=8,B=20,pd=daily?432e5:0,x0=+rows[0].t-pd,x1=+rows[rows.length-1].t+pd,v=ks.flatMap(k=>rows.map(r=>r[k])).filter(x=>!isNaN(x));let lo=Math.min(...v),hi=Math.max(...v);if(z)lo=Math.min(0,lo);if(hi==lo){hi+=1;lo-=1}if(fx){lo=fx[0];hi=fx[1]}
 const X=t=>L+(t-x0)/(x1-x0||1)*(W-L-R),Y=y=>T+(1-(y-lo)/(hi-lo))*(H-T-B);c.strokeStyle='#e1e6ec';c.fillStyle='#6b7785';c.textAlign='right';
@@ -103,10 +111,10 @@ $('#pre').onchange=()=>{const v=$('#pre').value;$('#day').hidden=v!='d';$('#mon'
 $('#rf').onclick=cur;
 $('#gear').onclick=()=>{$('#st').value=cfg.st||'';$('#key').value=cfg.key||'';$('#dlg').showModal()};$('#cancel').onclick=()=>$('#dlg').close();
 $('#ok').onclick=()=>{let k=$('#key').value.trim(),s=$('#st').value.trim();const u=new URLSearchParams(k.split('#').pop());if(u.get('key')){k=u.get('key');s=u.get('station')||s}
-if(!k||!s)return msg('Bitte beide Felder ausfüllen.');cfg={key:k,st:s};store('wu',cfg);$('#dlg').close();$('#stn').textContent='Station '+s;rows=[];cur();if(!$('#hist').hidden)hist()};
+if(!k||!s)return msg('Bitte beide Felder ausfüllen.');cfg={key:k,st:s};fcT=0;store('wu',cfg);$('#dlg').close();$('#stn').textContent='Station '+s;rows=[];cur();if(!$('#hist').hidden)hist()};
 let rt,rw=innerWidth;addEventListener('resize',()=>{if(innerWidth==rw)return;rw=innerWidth;clearTimeout(rt);rt=setTimeout(()=>rows.length&&!$('#hist').hidden&&draw(),200)});
 setInterval(()=>{if(!document.hidden&&cfg.key)cur()},3e5);
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 $('#stn').textContent=cfg.st?'Station '+cfg.st:'';
-if(!cfg.key||!cfg.st)$('#gear').click();else cur();
+if(!cfg.key||!cfg.st)$('#gear').click();else{cur();fc()}
 </script></body></html>
