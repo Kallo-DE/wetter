@@ -31,7 +31,7 @@ dialog{background:var(--card);color:var(--tx);border:0;border-radius:12px;width:
 </section></main>
 <div id=msg></div>
 <dialog id=dlg><b>Einstellungen</b><br><br>Stations-ID<input id=st autocomplete=off autocapitalize=characters>
-API-Key (oder ganzen Einrichtungslink einfügen)<input id=key autocomplete=off>
+API-Key (oder ganzen Einrichtungslink einfügen)<input id=key autocomplete=off>Höhe der Station in Metern ü. NN (optional, hat Vorrang vor dem automatischen Wert)<input id=hoe inputmode=decimal autocomplete=off placeholder="z. B. 165">
 <div class=bar><button id=cancel>Abbrechen</button><button id=ok style="background:#2f6fb3;color:#fff">Speichern</button></div></dialog>
 <script>
 const $=s=>document.querySelector(s),pad=n=>String(n).padStart(2,'0'),n=v=>v==null||v===''?NaN:+v,f=(v,d)=>isNaN(v)?'–':v.toFixed(d).replace('.',',');
@@ -44,7 +44,7 @@ const info=Object.fromEntries(SER.map(s=>[s[0],s]));
 const load=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}},store=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}};
 let cfg=load('wu',{}),sel=load('sel',SER.filter(s=>s[5]).map(s=>s[0])),rows=[];
 // Einrichtungslink: https://…/#key=DEIN_KEY&station=DEINE_ID
-(()=>{const h=new URLSearchParams(location.hash.slice(1));if(h.get('key')){cfg={key:h.get('key').trim(),st:(h.get('station')||cfg.st||'').trim()};store('wu',cfg);history.replaceState(null,'',location.pathname+location.search)}})();
+(()=>{const h=new URLSearchParams(location.hash.slice(1));if(h.get('key')){cfg={key:h.get('key').trim(),st:(h.get('station')||cfg.st||'').trim(),elevUser:cfg.elevUser};store('wu',cfg);history.replaceState(null,'',location.pathname+location.search)}})();
 function msg(t){const m=$('#msg');m.textContent=t;m.style.display='block';setTimeout(()=>m.style.display='none',6000)}
 async function get(ep,p={}){if(!cfg.key||!cfg.st)throw Error('Bitte zuerst unter ⚙ Stations-ID und API-Key eintragen.');
 const q=new URLSearchParams({stationId:cfg.st,format:'json',units:'m',numericPrecision:'decimal',apiKey:cfg.key,...p});let r;
@@ -115,7 +115,7 @@ const bs=(k,s)=>R.reduce((b,r)=>!isNaN(r[k])&&(!b||s*r[k]>s*b[k])?r:b,null),hm=r
 T=(l,r,k,u,d,t)=>`<div class=tile><small>${l}</small><b>${f(r?r[k]:NaN,d)}${u}</b><small>${r&&t?'um '+hm(r):' '}</small></div>`;
 $('#tod').innerHTML=T('🌡 Tiefstwert',bs('tlo',-1),'tlo',' °C',1,1)+T('🌡 Höchstwert',bs('thi',1),'thi',' °C',1,1)+T('🌬 Stärkste Böe',bs('gust',1),'gust',' km/h',1,1)+T('🌧 Regen heute',bs('rain',1),'rain',' mm',1,0)+T('🕶 UV-Maximum',bs('uv',1),'uv','',1,1)}catch(e){}}
 const mx=a=>a.length?Math.max(...a):NaN,mn=a=>a.length?Math.min(...a):NaN,BL=[['Nachts',0,6],['Morgens',6,12],['Mittags',12,18],['Abends',18,24]];
-const fh=()=>{const h=cfg.elev>0?Math.round(cfg.elev)+' m ü. NN':cfg.elevM>0?'ca. '+Math.round(cfg.elevM)+' m ü. NN':'';$('#fh').textContent='Wettervorhersage für '+(cfg.place||'den Standort der Station')+(h?' ('+h+')':'')+' · 5 Tage'};
+const elv=()=>cfg.elevUser>0?[cfg.elevUser,0]:cfg.elev>0?[cfg.elev,0]:cfg.elevM>0?[cfg.elevM,1]:[0,0],fh=()=>{const[e,ca]=elv(),h=e>0?(ca?'ca. ':'')+Math.round(e)+' m ü. NN':'';$('#fh').textContent='Wettervorhersage für '+(cfg.place||'den Standort der Station')+(h?' ('+h+')':'')+' · 5 Tage'};
 // Schneefallgrenze (nur Nov–Mär): Modellwert, sonst Nullgradgrenze minus ca. 300 m
 const win=()=>{const m=new Date().getMonth();return m>=10||m<=2},r10=x=>Math.round(x/10)*10,
 sgv=(h,i)=>{const a=h.snowfall_height&&h.snowfall_height[i],b=h.freezing_level_height&&h.freezing_level_height[i];return a!=null?a:b!=null?Math.max(0,b-300):null},
@@ -124,7 +124,7 @@ function sgShow(h){const el=$('#sg');if(!win()||!h){el.hidden=true;return}
 const now=new Date(),key=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate()),V=[];let c=null;
 h.time.forEach((t,i)=>{if(t.slice(0,10)==key){const v=sgv(h,i);if(v!=null){V.push(v);if(+t.slice(11,13)==now.getHours())c=v}}});
 if(!V.length){el.hidden=true;return}
-const est=!(h.snowfall_height&&h.snowfall_height.some(x=>x!=null)),E=cfg.elev>0?cfg.elev:cfg.elevM,rel=E>0&&c!=null?(c>E?' – Station liegt darunter: eher Regen':' – Station liegt darüber: Schnee möglich'):'';
+const est=!(h.snowfall_height&&h.snowfall_height.some(x=>x!=null)),E=elv()[0],rel=E>0&&c!=null?(c>E?' – Station liegt darunter: eher Regen':' – Station liegt darüber: Schnee möglich'):'';
 el.hidden=false;el.innerHTML='<b>❄ Schneefallgrenze</b> '+(c!=null?'aktuell ca. '+f(r10(c),0)+' m':'')+'<br><span class=st>Heute zwischen '+f(r10(mn(V)),0)+' und '+f(r10(mx(V)),0)+' m ü. NN'+rel+(est?' · geschätzt':'')+'</span>'}
 let fcT=0,geoTried=0,lastR=null,cw=null;
 async function geo(){if(geoTried++)return;try{const r=await fetch('https://nominatim.openstreetmap.org/reverse?'+new URLSearchParams({lat:cfg.lat,lon:cfg.lon,format:'jsonv2',zoom:10,'accept-language':'de'}));const ad=(await r.json()).address||{};cfg.place=ad.village||ad.town||ad.city||ad.municipality||ad.county||'';store('wu',cfg);fh()}catch(e){}}
@@ -170,9 +170,9 @@ const HM='Hinweis: Das erste Laden eines Monats dauert etwa eine Minute, weil We
 $('#pre').onchange=()=>{const v=$('#pre').value;$('#day').hidden=v!='d';$('#mon').hidden=v!='M';$('#yr').hidden=v!='J';$('#hint').hidden=!'mMYJ'.includes(v)||v.length>1;$('#hint').textContent=v=='Y'||v=='J'?HY:HM;if(v!='d')hist()};$('#day').onchange=hist;$('#mon').onchange=hist;$('#yr').onchange=hist;$('#day').max=new Date().toISOString().slice(0,10);(()=>{const t=new Date(),v=t.getFullYear()+'-'+pad(t.getMonth()+1);$('#mon').max=v;t.setDate(1);t.setMonth(t.getMonth()-1);$('#mon').value=t.getFullYear()+'-'+pad(t.getMonth()+1)})();
 (()=>{const y0=new Date().getFullYear();$('#yr').innerHTML=Array.from({length:7},(_,i)=>'<option>'+(y0-i)).join('')})();
 $('#rf').onclick=cur;
-$('#gear').onclick=()=>{$('#st').value=cfg.st||'';$('#key').value=cfg.key||'';$('#dlg').showModal()};$('#cancel').onclick=()=>$('#dlg').close();
+$('#gear').onclick=()=>{$('#st').value=cfg.st||'';$('#key').value=cfg.key||'';$('#hoe').value=cfg.elevUser||'';$('#dlg').showModal()};$('#cancel').onclick=()=>$('#dlg').close();
 $('#ok').onclick=()=>{let k=$('#key').value.trim(),s=$('#st').value.trim();const u=new URLSearchParams(k.split('#').pop());if(u.get('key')){k=u.get('key');s=u.get('station')||s}
-if(!k||!s)return msg('Bitte beide Felder ausfüllen.');cfg={key:k,st:s};fcT=0;store('wu',cfg);$('#dlg').close();$('#stn').textContent='Station '+s;rows=[];cur();if(!$('#hist').hidden)hist()};
+if(!k||!s)return msg('Bitte beide Felder ausfüllen.');cfg={key:k,st:s,elevUser:+($('#hoe').value||'').replace(',','.')||0};fcT=0;store('wu',cfg);$('#dlg').close();$('#stn').textContent='Station '+s;rows=[];cur();if(!$('#hist').hidden)hist()};
 let rt,rw=innerWidth;addEventListener('resize',()=>{if(innerWidth==rw)return;rw=innerWidth;clearTimeout(rt);rt=setTimeout(()=>rows.length&&!$('#hist').hidden&&draw(),200)});
 setInterval(()=>{if(!document.hidden&&cfg.key)cur()},3e5);
 if(window.matchMedia)matchMedia('(prefers-color-scheme:dark)').addEventListener('change',()=>rows.length&&draw());
