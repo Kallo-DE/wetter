@@ -23,9 +23,9 @@ dialog{background:var(--card);color:var(--tx);border:0;border-radius:12px;width:
 <header><b>🌦 Wetter</b><span id=stn></span><button id=gear title="Einstellungen">⚙</button></header>
 <nav><button data-t=now class=on>Aktuell</button><button data-t=hist>Verlauf</button></nav>
 <main>
-<section id=now><div class=bar><span id=stamp>Lade …</span><button id=rf>↻</button></div><div id=wx class=wx></div><div id=tiles></div><h3 class=fh>Heute bisher</h3><div id=tod></div><h3 class=fh id=fh>Wettervorhersage · nächste 5 Tage</h3><div class=st>Tippe auf einen Tag für Details (nachts, morgens, mittags, abends).</div><div id=fc>Vorhersage wird geladen …</div><div class=st style="margin:6px 0 12px">Vorhersage für den Standort der Station von <a href="https://open-meteo.com" target=_blank rel=noopener>Open-Meteo.com</a></div></section>
+<section id=now><div class=bar><span id=stamp>Lade …</span><button id=rf>↻</button></div><div id=wx class=wx></div><div id=sg class=fr style="cursor:default" hidden></div><div id=tiles></div><h3 class=fh>Heute bisher</h3><div id=tod></div><h3 class=fh id=fh>Wettervorhersage · nächste 5 Tage</h3><div class=st>Tippe auf einen Tag für Details (nachts, morgens, mittags, abends).</div><div id=fc>Vorhersage wird geladen …</div><div class=st style="margin:6px 0 12px">Vorhersage für den Standort der Station von <a href="https://open-meteo.com" target=_blank rel=noopener>Open-Meteo.com</a></div></section>
 <section id=hist hidden>
-<div class=bar><select id=pre><option value=24>Letzte 24 Stunden<option value=7>Letzte 7 Tage<option value=0>Heute<option value=1>Gestern<option value=m>Letzter Monat (1. bis heute)<option value=M>Monat wählen …<option value=d>Tag wählen …</select><input type=date id=day hidden><input type=month id=mon hidden></div>
+<div class=bar><select id=pre><option value=24>Letzte 24 Stunden<option value=7>Letzte 7 Tage<option value=0>Heute<option value=1>Gestern<option value=m>Letzter Monat (1. bis heute)<option value=M>Monat wählen …<option value=Y>Dieses Jahr (1. Jan. bis heute)<option value=J>Jahr wählen …<option value=d>Tag wählen …</select><input type=date id=day hidden><input type=month id=mon hidden><select id=yr hidden></select></div>
 <div id=hint class=st hidden>Hinweis: Das erste Laden eines Monats dauert etwa eine Minute, weil Weather Underground nur wenige Abrufe pro Minute erlaubt. Danach öffnet derselbe Monat sofort.</div><div id=chips></div><div id=info class=st></div><div id=prog class=card hidden><b id=pt></b><progress id=pb max=1 value=0 style="width:100%;margin:8px 0"></progress><div class=st>Bitte die Seite geöffnet lassen. Bereits geladene Tage werden gespeichert – bei einem Abbruch geht es später dort weiter.</div></div><div id=charts></div>
 <div class=bar><label><input type=checkbox id=xl checked> Excel-Format</label><button id=csv>📄 CSV exportieren</button></div>
 </section></main>
@@ -58,32 +58,37 @@ hum:g(o.humidityAvg,o.humidity),press:!isNaN(n(m.pressureMax))&&!isNaN(n(m.press
 wind:g(m.windspeedAvg,m.windSpeed),gust:g(m.windgustHigh,m.windGust),dir:g(o.winddirAvg,o.winddir),rain:g(m.precipTotal),rate:g(m.precipRate),
 uv:g(o.uvHigh,o.uv),sol:g(o.solarRadiationHigh,o.solarRadiation),tlo:g(m.tempLow,m.tempAvg,m.temp),thi:g(m.tempHigh,m.tempAvg,m.temp),hlo:g(o.humidityLow,o.humidityAvg,o.humidity),hhi:g(o.humidityHigh,o.humidityAvg,o.humidity),plo:g(m.pressureMin,m.pressure),phi:g(m.pressureMax,m.pressure)}}
 async function cur(){try{const a=await get('observations/current');if(!a.length){$('#stamp').textContent='Keine aktuellen Daten (Station sendet nicht).';return}
-const r=map(a[0]);if(a[0].lat!=null&&a[0].lon!=null){const nb=(a[0].neighborhood||'').trim(),mv=cfg.lat!=a[0].lat||cfg.lon!=a[0].lon;if(mv||(nb&&cfg.place!=nb)){cfg.lat=a[0].lat;cfg.lon=a[0].lon;cfg.place=nb||(mv?'':cfg.place);store('wu',cfg)}if(!cfg.place)geo();fh()}fc();lastR=r;$('#tiles').innerHTML=TL.map(([k,l])=>{const s=info[k]||[];const v=k=='dir'?cp(r.dir)+' ('+f(r.dir,0)+'°)':f(r[k],s[3])+(s[2]?' '+s[2]:'');return`<div class=tile><small>${l}</small><b>${v}</b></div>`}).join('');
+const r=map(a[0]);if(a[0].lat!=null&&a[0].lon!=null){const nb=(a[0].neighborhood||'').trim(),mv=cfg.lat!=a[0].lat||cfg.lon!=a[0].lon;if(mv||(nb&&cfg.place!=nb)){cfg.lat=a[0].lat;cfg.lon=a[0].lon;cfg.place=nb||(mv?'':cfg.place);store('wu',cfg)}if(!cfg.place)geo();const el=+((a[0].metric||{}).elev);if(!isNaN(el)&&cfg.elev!=el){cfg.elev=el;store('wu',cfg)}fh()}fc();lastR=r;$('#tiles').innerHTML=TL.map(([k,l])=>{const s=info[k]||[];const v=k=='dir'?cp(r.dir)+' ('+f(r.dir,0)+'°)':f(r[k],s[3])+(s[2]?' '+s[2]:'');return`<div class=tile><small>${l}</small><b>${v}</b></div>`}).join('');
 wxDraw();today();$('#stamp').textContent='Stand: '+r.t.toLocaleString('de-DE',{dateStyle:'short',timeStyle:'short'})}catch(e){msg(e.message)}}
 const pk=r=>({...r,t:+r.t}),up=r=>{const o={};for(const k in r)o[k]=r[k]===null?NaN:r[k];o.t=new Date(r.t);return o},wait=ms=>new Promise(z=>setTimeout(z,ms));
 let daily=false,loading=0,tok=0;
 function prog(t,v){$('#prog').hidden=!t;if(t){$('#pt').textContent=t;$('#pb').value=v||0}}
 async function getRetry(ep,p){for(let k=0;;k++){try{return await get(ep,p)}catch(e){if(e.code!=429||k>=2)throw e;for(let s=30;s>0;s--){prog('Abruflimit von Weather Underground erreicht – weiter in '+s+' s …');await wait(1000)}}}}
-// Tageswerte eines Monats; abgeschlossene Tage werden dauerhaft gespeichert (schont das Abruflimit)
-async function month(y,mo,t){const now=new Date(),cm=y==now.getFullYear()&&mo==now.getMonth(),N=cm?now.getDate():new Date(y,mo+1,0).getDate(),cache=load('days2',{}),out=[],ky=i=>''+y+pad(mo+1)+pad(i);
-let need=0,done=0,fetched=0;for(let i=1;i<=N;i++)if(cache[ky(i)]===undefined&&!(cm&&i==N))need++;
+const rng=(a,b)=>{const o=[],e=b>new Date()?new Date():b;for(const d=new Date(a);d<=e;d.setDate(d.getDate()+1))o.push(new Date(d));return o},
+eta=n=>{const s=n*2.3;return s<90?Math.max(1,Math.round(s))+' Sekunden':Math.ceil(s/60)+' Minuten'};
+// Tageswerte für eine Liste von Tagen; abgeschlossene Tage werden dauerhaft gespeichert (schont das Abruflimit)
+async function span(list,t){const now=new Date(),ts=d=>''+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate()),isT=d=>ts(d)==ts(now),cache=load('days2',{}),out=[];
+let need=list.filter(d=>cache[ts(d)]===undefined&&!isT(d)).length,done=0,fetched=0;
 if(need>1)prog('Daten werden geladen …',0);
-try{for(let i=1;i<=N;i++){if(t!=tok)return out;const k=ky(i),today=cm&&i==N;let r=today?undefined:cache[k];
+try{for(const d of list){if(t!=tok)return out;const k=ts(d),td=isT(d);let r=td?undefined:cache[k];
 if(r===undefined){if(fetched++)await wait(2100);if(t!=tok)return out;
-if(need>1)prog('Lade Tag '+i+' von '+N+' – noch ca. '+Math.max(1,Math.round((need-done)*2.3))+' Sekunden',done/need);
+if(need>1)prog('Lade '+pad(d.getDate())+'.'+pad(d.getMonth()+1)+'. ('+(done+1)+' von '+need+') – noch ca. '+eta(need-done),done/need);
 let a;try{a=await getRetry('history/daily',{date:k})}catch(e){out.warn=e.message;break}
-r=a.length&&!isNaN(+map(a[0]).t)?pk(map(a[0])):null;if(!today){cache[k]=r;done++}}
+r=a.length&&!isNaN(+map(a[0]).t)?pk(map(a[0])):null;if(!td){cache[k]=r;done++;if(done%10==0)store('days2',cache)}}
 if(r)out.push(up(r))}}finally{store('days2',cache)}
 return out}
 async function hist(){const p=$('#pre').value,t=++tok;loading=1;rows=[];$('#charts').innerHTML='';$('#info').textContent='Lade …';
-try{daily=p=='m'||p=='M';let w='';
-if(daily){let y,mo;if(p=='m'){const n=new Date();y=n.getFullYear();mo=n.getMonth()}else{const v=$('#mon').value;if(!v){loading=0;$('#info').textContent='';return}y=+v.slice(0,4);mo=+v.slice(5,7)-1}
-rows=await month(y,mo,t);if(t!=tok)return;w=rows.warn||'';if(!rows.length&&w)throw Error(w)}
+try{daily=['m','M','Y','J'].includes(p);let w='';
+if(daily){const n=new Date();let L;
+if(p=='m')L=rng(new Date(n.getFullYear(),n.getMonth(),1),n);
+else if(p=='M'){const v=$('#mon').value;if(!v){loading=0;$('#info').textContent='';return}const y=+v.slice(0,4),mo=+v.slice(5,7);L=rng(new Date(y,mo-1,1),new Date(y,mo,0))}
+else{const y=p=='Y'?n.getFullYear():+$('#yr').value;L=rng(new Date(y,0,1),new Date(y,11,31))}
+rows=await span(L,t);if(t!=tok)return;w=rows.warn||'';if(!rows.length&&w)throw Error(w)}
 else{let a;
 if(p=='24')a=await get('observations/all/1day');else if(p=='7')a=await get('observations/hourly/7day');
 else{const d=new Date();if(p=='1')d.setDate(d.getDate()-1);const s=p=='d'?$('#day').value.replace(/-/g,''):''+d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate());if(!s){loading=0;$('#info').textContent='';return}a=await get('history/all',{date:s})}
 if(t!=tok)return;rows=a.map(map).filter(r=>!isNaN(+r.t)).sort((x,y)=>x.t-y.t)}
-loading=0;prog('');draw();if(w)$('#info').textContent+=' – Abbruch: '+w+' Die bereits geladenen Tage sind gespeichert; Monat erneut auswählen, um fortzufahren.'}
+loading=0;prog('');draw();if(w)$('#info').textContent+=' – Abbruch: '+w+' Die bereits geladenen Tage sind gespeichert; den Zeitraum erneut auswählen, um fortzufahren.'}
 catch(e){if(t==tok){loading=0;prog('');$('#info').textContent=e.message;msg(e.message)}}}
 const SUN=`<g stroke="#ffb300" stroke-width="3" stroke-linecap="round">${[0,45,90,135,180,225,270,315].map(a=>`<line x1="32" y1="7" x2="32" y2="14" transform="rotate(${a} 32 32)"/>`).join('')}</g><circle cx="32" cy="32" r="12" fill="#ffc933"/>`,
 CL=c=>`<path d="M18 46h28a10 10 0 0 0 1.5-19.9A14 14 0 0 0 20 24a11 11 0 0 0-2 22z" fill="${c||'var(--cloud)'}"/>`,
@@ -110,16 +115,27 @@ const bs=(k,s)=>R.reduce((b,r)=>!isNaN(r[k])&&(!b||s*r[k]>s*b[k])?r:b,null),hm=r
 T=(l,r,k,u,d,t)=>`<div class=tile><small>${l}</small><b>${f(r?r[k]:NaN,d)}${u}</b><small>${r&&t?'um '+hm(r):' '}</small></div>`;
 $('#tod').innerHTML=T('🌡 Tiefstwert',bs('tlo',-1),'tlo',' °C',1,1)+T('🌡 Höchstwert',bs('thi',1),'thi',' °C',1,1)+T('🌬 Stärkste Böe',bs('gust',1),'gust',' km/h',1,1)+T('🌧 Regen heute',bs('rain',1),'rain',' mm',1,0)+T('🕶 UV-Maximum',bs('uv',1),'uv','',1,1)}catch(e){}}
 const mx=a=>a.length?Math.max(...a):NaN,mn=a=>a.length?Math.min(...a):NaN,BL=[['Nachts',0,6],['Morgens',6,12],['Mittags',12,18],['Abends',18,24]];
-const fh=()=>{$('#fh').textContent='Wettervorhersage für '+(cfg.place||'den Standort der Station')+' · 5 Tage'};
+const fh=()=>{const h=cfg.elev>0?Math.round(cfg.elev)+' m ü. NN':cfg.elevM>0?'ca. '+Math.round(cfg.elevM)+' m ü. NN':'';$('#fh').textContent='Wettervorhersage für '+(cfg.place||'den Standort der Station')+(h?' ('+h+')':'')+' · 5 Tage'};
+// Schneefallgrenze (nur Nov–Mär): Modellwert, sonst Nullgradgrenze minus ca. 300 m
+const win=()=>{const m=new Date().getMonth();return m>=10||m<=2},r10=x=>Math.round(x/10)*10,
+sgv=(h,i)=>{const a=h.snowfall_height&&h.snowfall_height[i],b=h.freezing_level_height&&h.freezing_level_height[i];return a!=null?a:b!=null?Math.max(0,b-300):null},
+sgTxt=S=>win()&&S.length?' · ❄ Schneefallgrenze '+(r10(mn(S))==r10(mx(S))?f(r10(mn(S)),0):f(r10(mn(S)),0)+'–'+f(r10(mx(S)),0))+' m':'';
+function sgShow(h){const el=$('#sg');if(!win()||!h){el.hidden=true;return}
+const now=new Date(),key=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate()),V=[];let c=null;
+h.time.forEach((t,i)=>{if(t.slice(0,10)==key){const v=sgv(h,i);if(v!=null){V.push(v);if(+t.slice(11,13)==now.getHours())c=v}}});
+if(!V.length){el.hidden=true;return}
+const est=!(h.snowfall_height&&h.snowfall_height.some(x=>x!=null)),E=cfg.elev>0?cfg.elev:cfg.elevM,rel=E>0&&c!=null?(c>E?' – Station liegt darunter: eher Regen':' – Station liegt darüber: Schnee möglich'):'';
+el.hidden=false;el.innerHTML='<b>❄ Schneefallgrenze</b> '+(c!=null?'aktuell ca. '+f(r10(c),0)+' m':'')+'<br><span class=st>Heute zwischen '+f(r10(mn(V)),0)+' und '+f(r10(mx(V)),0)+' m ü. NN'+rel+(est?' · geschätzt':'')+'</span>'}
 let fcT=0,geoTried=0,lastR=null,cw=null;
 async function geo(){if(geoTried++)return;try{const r=await fetch('https://nominatim.openstreetmap.org/reverse?'+new URLSearchParams({lat:cfg.lat,lon:cfg.lon,format:'jsonv2',zoom:10,'accept-language':'de'}));const ad=(await r.json()).address||{};cfg.place=ad.village||ad.town||ad.city||ad.municipality||ad.county||'';store('wu',cfg);fh()}catch(e){}}
 function blocks(h,date){return BL.map(([nm,a,b])=>{const ix=[];h.time.forEach((t,i)=>{const hr=+t.slice(11,13);if(t.slice(0,10)==date&&hr>=a&&hr<b)ix.push(i)});if(!ix.length)return'';
-const v=k=>ix.map(i=>h[k][i]).filter(x=>x!=null),T=v('temperature_2m'),P=v('precipitation'),Q=v('precipitation_probability'),G=v('wind_gusts_10m'),cnt={};
+const v=k=>ix.map(i=>h[k][i]).filter(x=>x!=null),T=v('temperature_2m'),P=v('precipitation'),Q=v('precipitation_probability'),G=v('wind_gusts_10m'),SG=ix.map(i=>sgv(h,i)).filter(x=>x!=null),cnt={};
 v('weather_code').forEach(c=>cnt[c]=(cnt[c]||0)+1);const ks=Object.keys(cnt).sort((x,y)=>cnt[y]-cnt[x]||y-x);const[e,x]=ks.length?wm(+ks[0]):['cloud',''];
-return`<div class=bl><b>${nm}</b> <span class=st>${a}–${b} Uhr</span><br>${ic(e,22,a==0)} ${x} · ${f(mn(T),0)} bis ${f(mx(T),0)}° · 🌧 ${f(P.length?P.reduce((s,y)=>s+y,0):NaN,1)} mm (${f(mx(Q),0)} %) · 💨 bis ${f(mx(G),0)} km/h</div>`}).join('')}
+return`<div class=bl><b>${nm}</b> <span class=st>${a}–${b} Uhr</span><br>${ic(e,22,a==0)} ${x} · ${f(mn(T),0)} bis ${f(mx(T),0)}° · 🌧 ${f(P.length?P.reduce((s,y)=>s+y,0):NaN,1)} mm (${f(mx(Q),0)} %) · 💨 bis ${f(mx(G),0)} km/h${sgTxt(SG)}</div>`}).join('')}
 async function fc(){if(!cfg.lat||Date.now()-fcT<18e5)return;fcT=Date.now();
-try{const r=await fetch('https://api.open-meteo.com/v1/forecast?'+new URLSearchParams({latitude:cfg.lat,longitude:cfg.lon,daily:'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_gusts_10m_max',hourly:'temperature_2m,precipitation,precipitation_probability,weather_code,wind_gusts_10m',current:'weather_code,is_day',timezone:'auto',forecast_days:5}));
-if(!r.ok)throw 0;const j=await r.json(),d=j.daily;cw=j.current;wxDraw();
+try{const U=x=>'https://api.open-meteo.com/v1/forecast?'+new URLSearchParams({latitude:cfg.lat,longitude:cfg.lon,daily:'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_gusts_10m_max',hourly:'temperature_2m,precipitation,precipitation_probability,weather_code,wind_gusts_10m'+x,current:'weather_code,is_day',timezone:'auto',forecast_days:5});
+let r=await fetch(U(',snowfall_height,freezing_level_height'));if(!r.ok)r=await fetch(U(''));
+if(!r.ok)throw 0;const j=await r.json(),d=j.daily;cw=j.current;if(j.elevation!=null){cfg.elevM=j.elevation;store('wu',cfg);fh()}wxDraw();sgShow(j.hourly);
 $('#fc').innerHTML=d.time.map((t,i)=>{const[e,x]=wm(d.weather_code[i]);return`<div class=fr><b>${new Date(t+'T12:00').toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'})}</b> ${ic(e,28)} ${x} <span class=st>▾</span><br>↑ ${f(n(d.temperature_2m_max[i]),0)}° ↓ ${f(n(d.temperature_2m_min[i]),0)}° · 🌧 ${f(n(d.precipitation_sum[i]),1)} mm (${f(n(d.precipitation_probability_max[i]),0)} %) · 💨 Böen bis ${f(n(d.wind_gusts_10m_max[i]),0)} km/h<div class=fd hidden>${blocks(j.hourly,t)}</div></div>`}).join('')}
 catch(e){fcT=0;$('#fc').textContent='Vorhersage derzeit nicht verfügbar.'}}
 $('#fc').onclick=e=>{const r=e.target.closest('.fr');if(r){const d=r.querySelector('.fd');d.hidden=!d.hidden}};
@@ -142,7 +158,7 @@ c.fillStyle=CD;c.strokeStyle=GR;c.beginPath();c.rect(bx,T+2,w,h);c.fill();c.stro
 function draw(){if(loading)return;const box=$('#charts'),y=scrollY;box.style.minHeight=box.offsetHeight+'px';try{draw0(box)}finally{box.style.minHeight='';scrollTo(0,y)}}
 function draw0(box){box.innerHTML='';if(!rows.length){$('#info').textContent='Keine Daten für diesen Zeitraum.';return}$('#info').textContent=rows.length+(daily?' Tage':' Messwerte');
 PAN.forEach(([t,u,ks,z,fx])=>{const k2=ks.filter(k=>sel.includes(k)&&rows.some(r=>!isNaN(r[k])));if(!k2.length)return;const d=document.createElement('div');d.className='card';
-d.innerHTML=`<h3>${t}${u?' ('+u+')':''}</h3><canvas></canvas><div class=st>${k2.map(k=>{const v=rows.map(r=>r[k]).filter(x=>!isNaN(x)),s=info[k],B=daily&&BAND[k],lo=B?rows.map(r=>r[B[0]]).filter(x=>!isNaN(x)):v,hi=B?rows.map(r=>r[B[1]]).filter(x=>!isNaN(x)):v;return`<span style="color:${s[4]}">●</span> ${s[1]}: ${f(mn(lo),s[3])} bis ${f(mx(hi),s[3])}, Ø ${f(v.reduce((a,b)=>a+b)/v.length,s[3])}`}).join('<br>')}</div>`;box.appendChild(d);const cv=d.querySelector('canvas');plot(cv,k2,z,fx);cv.onpointerdown=cv.onpointermove=e=>{const m=cv._m,t=m.x0+(e.clientX-cv.getBoundingClientRect().left-m.L)/(m.W-m.L-m.R)*(m.x1-m.x0);let bi=0,bd=1e18;rows.forEach((r,j)=>{const dd=Math.abs(+r.t-t);if(dd<bd){bd=dd;bi=j}});plot(cv,k2,z,fx,bi);clearTimeout(cv._t);if(e.pointerType!='mouse')cv._t=setTimeout(()=>plot(cv,k2,z,fx),2000)};cv.onpointerleave=e=>{if(e.pointerType=='mouse'){clearTimeout(cv._t);plot(cv,k2,z,fx)}};cv.onpointercancel=()=>{clearTimeout(cv._t);plot(cv,k2,z,fx)}})}
+d.innerHTML=`<h3>${t}${u?' ('+u+')':''}</h3><canvas></canvas><div class=st>${k2.map(k=>{const v=rows.map(r=>r[k]).filter(x=>!isNaN(x)),s=info[k],B=daily&&BAND[k],lo=B?rows.map(r=>r[B[0]]).filter(x=>!isNaN(x)):v,hi=B?rows.map(r=>r[B[1]]).filter(x=>!isNaN(x)):v;return`<span style="color:${s[4]}">●</span> ${s[1]}: ${f(mn(lo),s[3])} bis ${f(mx(hi),s[3])}, Ø ${f(v.reduce((a,b)=>a+b)/v.length,s[3])}${daily&&k=='rain'?', Summe '+f(v.reduce((a,b)=>a+b,0),1)+' mm':''}`}).join('<br>')}</div>`;box.appendChild(d);const cv=d.querySelector('canvas');plot(cv,k2,z,fx);cv.onpointerdown=cv.onpointermove=e=>{const m=cv._m,t=m.x0+(e.clientX-cv.getBoundingClientRect().left-m.L)/(m.W-m.L-m.R)*(m.x1-m.x0);let bi=0,bd=1e18;rows.forEach((r,j)=>{const dd=Math.abs(+r.t-t);if(dd<bd){bd=dd;bi=j}});plot(cv,k2,z,fx,bi);clearTimeout(cv._t);if(e.pointerType!='mouse')cv._t=setTimeout(()=>plot(cv,k2,z,fx),2000)};cv.onpointerleave=e=>{if(e.pointerType=='mouse'){clearTimeout(cv._t);plot(cv,k2,z,fx)}};cv.onpointercancel=()=>{clearTimeout(cv._t);plot(cv,k2,z,fx)}})}
 $('#chips').innerHTML=SER.map(s=>`<label class=chip><input type=checkbox value=${s[0]} ${sel.includes(s[0])?'checked':''}> ${s[1]}</label>`).join('');
 $('#chips').onchange=()=>{sel=[...document.querySelectorAll('#chips input:checked')].map(i=>i.value);store('sel',sel);draw()};
 $('#csv').onclick=()=>{if(!rows.length)return msg('Keine Daten zum Exportieren.');const ks=SER.filter(s=>sel.includes(s[0])),u=s=>s[2]?' ('+s[2]+')':'',cols=ks.flatMap(s=>{const B=daily&&BAND[s[0]];return[[s[0],s[1]+(B?' Mittel':'')+u(s)],...(B?[[B[0],s[1]+' Min'+u(s)],[B[1],s[1]+' Max'+u(s)]]:[])]}),x=$('#xl').checked,sep=x?';':',',num=v=>isNaN(v)?'':x?String(v).replace('.',','):String(v);
@@ -150,7 +166,9 @@ const L=[['Zeit',...cols.map(c=>c[1])].join(sep)];
 rows.forEach(r=>L.push([`${pad(r.t.getDate())}.${pad(r.t.getMonth()+1)}.${r.t.getFullYear()} ${pad(r.t.getHours())}:${pad(r.t.getMinutes())}`,...cols.map(c=>num(r[c[0]]))].join(sep)));
 const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+L.join('\r\n')],{type:'text/csv'}));a.download='wetter_'+cfg.st+'.csv';a.click()};
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x==b));$('#now').hidden=b.dataset.t!='now';$('#hist').hidden=b.dataset.t!='hist';if(b.dataset.t=='hist'&&!rows.length)hist();else if(b.dataset.t=='hist')draw()});
-$('#pre').onchange=()=>{const v=$('#pre').value;$('#day').hidden=v!='d';$('#mon').hidden=v!='M';$('#hint').hidden=v!='m'&&v!='M';if(v!='d')hist()};$('#day').onchange=hist;$('#mon').onchange=hist;$('#day').max=new Date().toISOString().slice(0,10);(()=>{const t=new Date(),v=t.getFullYear()+'-'+pad(t.getMonth()+1);$('#mon').max=v;t.setDate(1);t.setMonth(t.getMonth()-1);$('#mon').value=t.getFullYear()+'-'+pad(t.getMonth()+1)})();
+const HM='Hinweis: Das erste Laden eines Monats dauert etwa eine Minute, weil Weather Underground nur wenige Abrufe pro Minute erlaubt. Danach öffnet derselbe Monat sofort.',HY='Hinweis: Ein ganzes Jahr zu laden dauert beim ersten Mal sehr lange (ca. 2 Sekunden pro Tag, bis zu etwa 12 Minuten). Bitte Seite und Bildschirm offen lassen. Schon geladene Tage bleiben gespeichert; bei einem Abbruch den Zeitraum einfach erneut auswählen, dann geht es dort weiter.';
+$('#pre').onchange=()=>{const v=$('#pre').value;$('#day').hidden=v!='d';$('#mon').hidden=v!='M';$('#yr').hidden=v!='J';$('#hint').hidden=!'mMYJ'.includes(v)||v.length>1;$('#hint').textContent=v=='Y'||v=='J'?HY:HM;if(v!='d')hist()};$('#day').onchange=hist;$('#mon').onchange=hist;$('#yr').onchange=hist;$('#day').max=new Date().toISOString().slice(0,10);(()=>{const t=new Date(),v=t.getFullYear()+'-'+pad(t.getMonth()+1);$('#mon').max=v;t.setDate(1);t.setMonth(t.getMonth()-1);$('#mon').value=t.getFullYear()+'-'+pad(t.getMonth()+1)})();
+(()=>{const y0=new Date().getFullYear();$('#yr').innerHTML=Array.from({length:7},(_,i)=>'<option>'+(y0-i)).join('')})();
 $('#rf').onclick=cur;
 $('#gear').onclick=()=>{$('#st').value=cfg.st||'';$('#key').value=cfg.key||'';$('#dlg').showModal()};$('#cancel').onclick=()=>$('#dlg').close();
 $('#ok').onclick=()=>{let k=$('#key').value.trim(),s=$('#st').value.trim();const u=new URLSearchParams(k.split('#').pop());if(u.get('key')){k=u.get('key');s=u.get('station')||s}
